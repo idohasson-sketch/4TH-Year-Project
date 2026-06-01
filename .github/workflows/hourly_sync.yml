@@ -23,4 +23,7 @@ jobs:
         pip install requests supabase
 
     - name: Execute Sync Script
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       run: python automation/urban_birds_sync.py
