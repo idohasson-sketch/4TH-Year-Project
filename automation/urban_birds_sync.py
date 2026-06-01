@@ -1,20 +1,21 @@
+import os
 import requests
 import re
 from datetime import datetime, timedelta
 from supabase import create_client, Client
-import os
 
 # --- Configurations ---
 COUNTRY_CODE = "IL"
 EBIRD_API_KEY = "kuj19arnk19s"  
 
-# Dynamically fetch credentials from GitHub Environment Secrets
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://pxkevqlcaiazhgqrxbsp.supabase.co")
+# 🛑 מחיקת הכתובות הישנות ומשיכה דינמית מ-GitHub Secrets
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-# Fallback checking to ensure variables exist
-if not SUPABASE_KEY:
-    raise ValueError("❌ CRITICAL: SUPABASE_KEY environment variable is missing!")
+# בדיקת הגנה קריטית - מוודא שהמפתחות הגיעו מגיטהאב
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print(f"❌ ERROR: Missing credentials! URL: {bool(SUPABASE_URL)}, KEY: {bool(SUPABASE_KEY)}")
+    raise ValueError("Missing Supabase Environment Variables!")
 
 # Initialize Supabase Client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
