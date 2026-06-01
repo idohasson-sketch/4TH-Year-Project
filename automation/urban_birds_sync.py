@@ -8,11 +8,11 @@ from supabase import create_client, Client
 COUNTRY_CODE = "IL"
 EBIRD_API_KEY = "kuj19arnk19s"  
 
-# 🛑 מחיקת הכתובות הישנות ומשיכה דינמית מ-GitHub Secrets
+# Fetch variables from GitHub Environment Secrets
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-# בדיקת הגנה קריטית - מוודא שהמפתחות הגיעו מגיטהאב
+# Safe check to ensure variables are loaded correctly
 if not SUPABASE_URL or not SUPABASE_KEY:
     print(f"❌ ERROR: Missing credentials! URL: {bool(SUPABASE_URL)}, KEY: {bool(SUPABASE_KEY)}")
     raise ValueError("Missing Supabase Environment Variables!")
@@ -20,7 +20,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 # Initialize Supabase Client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Watchlist for Urban Birds in English (Official eBird Common Names)
+# Watchlist for Urban Birds
 WATCHLIST = [
     "Rock Pigeon",
     "Feral Pigeon",
@@ -51,11 +51,11 @@ def save_to_supabase(bird_name, location, obs_dt, qty, lat, lng):
             "longitude": float(lng) if lng is not None else None
         }
         
+        # Explicit execution to capture errors in the log
         supabase.table("urban_observations").insert(data).execute()
         return True
     except Exception as e:
-        if "duplicate key" not in str(e).lower():
-            print(f"⚠️ DB Insert Note: {e}")
+        print(f"❌ DB INSERT ERROR for {bird_name}: {e}")
         return False
 
 def check_historic_watchlist(days=90):
@@ -92,7 +92,7 @@ def check_historic_watchlist(days=90):
                         all_matches.append(obs)
                         
         except Exception as e:
-            print(f"⚠️ Note: Issue fetching data chunk: {e}")
+            print(f"⚠️ Fetch Issue: {e}")
             break
 
     if not all_matches:
@@ -102,8 +102,6 @@ def check_historic_watchlist(days=90):
     all_matches.sort(key=lambda x: x.get("obsDt", ""), reverse=True)
 
     print(f"✅ Found {len(all_matches)} urban bird observations. Syncing to DB...\n")
-    print(f"{'Bird Name':<25} | {'Location':<55} | {'Date & Time':<17} | {'Qty'}")
-    print("-" * 110)
     
     for obs in all_matches:
         bird_name = obs.get("comName", "Unknown")
@@ -114,9 +112,9 @@ def check_historic_watchlist(days=90):
         lng = obs.get("lng")
         
         save_to_supabase(bird_name, location, obs_dt, how_many, lat, lng)
-        print(f"{bird_name:<25} | {clean_hebrew_chars(location):<55} | {obs_dt:<17} | {how_many}")
+        print(f"🕊️ Processing: {bird_name:<25} | {clean_hebrew_chars(location):<55} | {obs_dt}")
 
-    print("\n📊 Sync finished. All urban data safely mirrored in 'urban_observations'.")
+    print("\n📊 Sync finished.")
 
 if __name__ == '__main__':
     check_historic_watchlist(days=90)
