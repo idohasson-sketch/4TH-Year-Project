@@ -12,7 +12,6 @@ EBIRD_API_KEY = "kuj19arnk19s"
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-# Safe check to ensure variables are loaded correctly
 if not SUPABASE_URL or not SUPABASE_KEY:
     print(f"❌ ERROR: Missing credentials! URL: {bool(SUPABASE_URL)}, KEY: {bool(SUPABASE_KEY)}")
     raise ValueError("Missing Supabase Environment Variables!")
@@ -51,7 +50,7 @@ def save_to_supabase(bird_name, location, obs_dt, qty, lat, lng):
             "longitude": float(lng) if lng is not None else None
         }
         
-        # Explicit execution to capture errors in the log
+        # Insert without restrictions
         supabase.table("urban_observations").insert(data).execute()
         return True
     except Exception as e:
@@ -59,7 +58,7 @@ def save_to_supabase(bird_name, location, obs_dt, qty, lat, lng):
         return False
 
 def check_historic_watchlist(days=90):
-    print(f"🔄 Fetching urban birds data for the last {days} days and syncing with Supabase...")
+    print(f"🔄 Fetching urban birds data for the last {days} days...")
     headers = {"X-eBirdApiToken": EBIRD_API_KEY}
     all_matches = []
     seen_records = set()
@@ -69,6 +68,7 @@ def check_historic_watchlist(days=90):
         end_date = datetime.now() - timedelta(days=chunk)
         
         if chunk == 0:
+            url = f"https://api.api.ebird.org/v2/data/obs/{COUNTRY_CODE}/recent" if not COUNTRY_CODE == "IL" else f"https://api.ebird.org/v2/data/obs/{COUNTRY_CODE}/recent"
             url = f"https://api.ebird.org/v2/data/obs/{COUNTRY_CODE}/recent"
             params = {"back": chunk_days, "sppLocale": "en"}
         else:
@@ -96,11 +96,10 @@ def check_historic_watchlist(days=90):
             break
 
     if not all_matches:
-        print(f"⚠️ No matching urban birds found in the last {days} days.")
+        print(f"⚠️ No matching urban birds found.")
         return
 
     all_matches.sort(key=lambda x: x.get("obsDt", ""), reverse=True)
-
     print(f"✅ Found {len(all_matches)} urban bird observations. Syncing to DB...\n")
     
     for obs in all_matches:
