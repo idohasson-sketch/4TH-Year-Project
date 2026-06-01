@@ -2,14 +2,19 @@ import requests
 import re
 from datetime import datetime, timedelta
 from supabase import create_client, Client
+import os
 
 # --- Configurations ---
 COUNTRY_CODE = "IL"
 EBIRD_API_KEY = "kuj19arnk19s"  
 
-# Supabase Credentials
-SUPABASE_URL = "https://lxyldmwzyxrzjutvnunp.supabase.co"
-SUPABASE_KEY = "sb_publishable_LLWh8dRzRbEQWdAgBMuT-Q_GLrFFWU8"
+# Dynamically fetch credentials from GitHub Environment Secrets
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://pxkevqlcaiazhgqrxbsp.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+# Fallback checking to ensure variables exist
+if not SUPABASE_KEY:
+    raise ValueError("❌ CRITICAL: SUPABASE_KEY environment variable is missing!")
 
 # Initialize Supabase Client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
