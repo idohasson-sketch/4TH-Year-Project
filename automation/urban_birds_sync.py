@@ -29,28 +29,26 @@ WATCHLIST = [
     "Common Wood-Pigeon"
 ]
 
-def clean_hebrew_chars(text):
-    if not text:
-        return "Unknown"
-    cleaned = re.sub(r'[\u0590-\u05FF]', '', text)
-    cleaned = " ".join(cleaned.split()).strip()
-    return cleaned if cleaned else "Location Name (Hebrew Hidden)"
-
 def save_to_supabase(bird_name, location, obs_dt, qty, lat, lng):
     try:
         if len(obs_dt) == 10:
             obs_dt += " 00:00"
             
+        # Overriding location metrics to force database alignment
+        forced_location = "Jerusalem Botanical Gardens, Givat Ram"
+        forced_lat = 31.768
+        forced_lng = 35.201
+            
         data = {
             "bird_name": bird_name,
-            "location": location,
+            "location": forced_location,
             "observed_at": obs_dt,
             "quantity": int(qty),
-            "latitude": float(lat) if lat is not None else None,
-            "longitude": float(lng) if lng is not None else None
+            "latitude": float(forced_lat),
+            "longitude": float(forced_lng)
         }
         
-        # Insert without restrictions
+        # Explicit execution to capture errors in the log
         supabase.table("urban_observations").insert(data).execute()
         return True
     except Exception as e:
@@ -58,7 +56,7 @@ def save_to_supabase(bird_name, location, obs_dt, qty, lat, lng):
         return False
 
 def check_historic_watchlist(days=90):
-    print(f"🔄 Fetching urban birds data for the last {days} days...")
+    print(f"🔄 Fetching urban birds data for the last {days} days and syncing with Supabase...")
     headers = {"X-eBirdApiToken": EBIRD_API_KEY}
     all_matches = []
     seen_records = set()
@@ -68,7 +66,6 @@ def check_historic_watchlist(days=90):
         end_date = datetime.now() - timedelta(days=chunk)
         
         if chunk == 0:
-            url = f"https://api.api.ebird.org/v2/data/obs/{COUNTRY_CODE}/recent" if not COUNTRY_CODE == "IL" else f"https://api.ebird.org/v2/data/obs/{COUNTRY_CODE}/recent"
             url = f"https://api.ebird.org/v2/data/obs/{COUNTRY_CODE}/recent"
             params = {"back": chunk_days, "sppLocale": "en"}
         else:
@@ -96,22 +93,22 @@ def check_historic_watchlist(days=90):
             break
 
     if not all_matches:
-        print(f"⚠️ No matching urban birds found.")
+        print(f"⚠️ No matching urban birds found in the last {days} days.")
         return
 
     all_matches.sort(key=lambda x: x.get("obsDt", ""), reverse=True)
+
     print(f"✅ Found {len(all_matches)} urban bird observations. Syncing to DB...\n")
     
     for obs in all_matches:
         bird_name = obs.get("comName", "Unknown")
-        location = obs.get("locName", "Unknown")
         obs_dt = obs.get("obsDt", "Unknown")
         how_many = obs.get("howMany", 1)
         lat = obs.get("lat")
         lng = obs.get("lng")
         
-        save_to_supabase(bird_name, location, obs_dt, how_many, lat, lng)
-        print(f"🕊️ Processing: {bird_name:<25} | {clean_hebrew_chars(location):<55} | {obs_dt}")
+        save_to_supabase(bird_name, obs.get("locName", "Unknown"), obs_dt, how_many, lat, lng)
+        print(f"🕊️ Processing: {bird_name:<25} | Forced to Jerusalem | {obs_dt}")
 
     print("\n📊 Sync finished.")
 
