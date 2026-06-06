@@ -39,23 +39,3 @@ Hardware: OpenMV Cam N6, PIR Motion Sensors, Thermal Sensors.
 Software: MicroPython, TinyML (TensorFlow Lite), PyTorch (for training), ONNX (for model porting).
 
 
-
-+-----------------------------------------------------------+
-|               SYSTEM DATA LIFECYCLE FLOW                  |
-+-----------------------------------------------------------+
-          |
-  [ 1. DETECTION ]  (PIR / Thermal Sensors)
-          |
-          v
-  [ 2. ACQUISITION ] (Camera Capture)
-          |
-          v
-  +---------------------------------------+
-  |    [ 3. ANALYSIS ] (Edge / TinyML)    |
-  |     (Model Inference: Sparrow/Pigeon) |
-  +---------------------------------------+
-          |
-          v
-  [ 4. NOTIFICATION ] (Alert + Data + GPS)
-          |
-+-----------------------------------------------------------+
