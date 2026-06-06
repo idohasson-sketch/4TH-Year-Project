@@ -40,7 +40,7 @@ Software: MicroPython, TinyML (TensorFlow Lite), PyTorch (for training), ONNX (f
 
 
 
-'''
+```
 graph TD
     A[Detection: PIR & Thermal Sensors] --> B[Acquisition: Image Capture]
     B --> C[Analysis: TinyML Model Inference]
@@ -54,4 +54,4 @@ graph TD
     style C fill:#f96,stroke:#333,stroke-width:2px
     style A fill:#bbf,stroke:#333
     style D fill:#dfd,stroke:#333
-'''
+```
