@@ -1,32 +1,55 @@
-Trail Cam: Smart Wildlife Detection Camera 🦌
-A smart, edge-based AI trail camera for real-time wildlife species identification, operating completely offline.
+A Eye Tracker: Smart Wildlife Detection Camera 🦌
+An autonomous, edge-based AI trail camera for real-time wildlife species identification, operating completely offline.
 
 🚀 The Problem
-Traditional wildlife monitoring tools generate millions of images requiring slow manual processing. They fail to provide real-time alerts and often depend on a stable internet connection for cloud-based analysis, which is rarely available in remote field locations.
+Traditional wildlife monitoring tools generate millions of images requiring slow, manual post-processing. Most existing solutions rely on stable internet connections for cloud-based analysis—a luxury rarely available in remote field locations—resulting in delayed data and high power consumption.
 
 🎯 Our Solution
-This project is an on-board AI monitoring system built on the OpenMV Cam N6 platform. It integrates multiple sensors with a local AI model for an autonomous, real-time solution.
+This project is an on-board AI monitoring system built on the OpenMV Cam N6 platform. It integrates motion/thermal sensing with a localized AI engine for an autonomous, real-time solution.
 
-Detect: Motion (PIR) and thermal sensors trigger the camera.
+Detect: PIR motion and thermal sensors trigger the camera instantly upon movement.
 
-Process: A TinyML model running directly on the device captures and analyzes the image, instantly identifying the animal's species.
+Process: A custom-trained TinyML model, running directly on the device, analyzes the image to identify the species.
 
-Alert: The system sends an immediate alert to a mobile application, complete with the image, species classification, and GPS coordinates.
+Alert: The system pushes immediate notifications to a mobile app, including the classification and GPS coordinates.
 
-This entire process happens on the edge, ensuring rapid response times, low power consumption, and reliable operation in isolated environments.
+🧠 Model Training & Performance
+To ensure high accuracy in field conditions, the classification model underwent a rigorous training process:
+
+Dataset Size: The model was trained on a robust dataset of 1,000 verified images per species (House Sparrow & Feral Pigeon), sourced from high-quality, research-grade iNaturalist observations.
+
+Validation: Performance metrics were validated using a dedicated test set of 150 images per species, ensuring the model generalizes well to new, unseen frames.
+
+Optimization: The model architecture was optimized specifically for edge deployment using weight quantization and ONNX conversion, ensuring high inference speeds without sacrificing classification reliability.
 
 ✨ Key Features
-Real-Time Species Identification
+Real-Time Species Identification: Instant classification upon detection.
 
-On-Prem / Edge AI Processing (No internet or cloud dependency)
+True Edge AI: Zero dependency on internet or cloud infrastructure; all processing happens on-device.
 
-Instant Mobile Notifications
+High Accuracy: Validated performance using verified research-grade datasets.
 
-Low-Power & Optimized for long-term field deployment
+Power Efficient: Optimized for long-term field deployment using low-power hardware components.
 
-Modular design based on the OpenMV platform
+Modular Design: Built on the OpenMV platform for easy hardware integration.
 
 🛠️ Technology Stack
-Hardware: OpenMV Cam N6, PIR Motion Sensors, Thermal Sensors
+Hardware: OpenMV Cam N6, PIR Motion Sensors, Thermal Sensors.
 
-Software: TinyML, MicroPython
+Software: MicroPython, TinyML (TensorFlow Lite), PyTorch (for training), ONNX (for model porting).
+
+
+
+graph TD
+    A[Detection: PIR & Thermal Sensors] --> B[Acquisition: Image Capture]
+    B --> C[Analysis: TinyML Model Inference]
+    C --> D[Notification: Mobile Alert + Data]
+    
+    subgraph "Edge Device (OpenMV Cam N6)"
+    B
+    C
+    end
+    
+    style C fill:#f96,stroke:#333,stroke-width:2px
+    style A fill:#bbf,stroke:#333
+    style D fill:#dfd,stroke:#333
