@@ -1,0 +1,371 @@
+    import os
+    import csv
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    import shutil
+    import numpy as np
+    from torchvision import transforms, models, datasets
+    from torch.utils.data import DataLoader
+    from PIL import Image
+    from ultralytics import YOLO
+    from tqdm import tqdm
+    import matplotlib.pyplot as plt
+    import matplotlib.colors as mcolors
+    import seaborn as sns
+    
+    # --- CONFIGURATION & PATHS ---
+    HOME_DIR = os.path.expanduser("~")
+    DATASET_DIR = os.path.join(HOME_DIR, 'Desktop', 'DB')
+    OUTPUT_IMAGE_PATH = os.path.join(HOME_DIR, 'Desktop', 'sanity_and_training_matrix.png')
+    
+    CLASSES = ['House_Sparrow', 'Feral_Pigeon', 'Rose_ringed_Parakeet', 'Hooded_Crow', 'Other']
+    TIERS = ["T1-1000", "T2-150", "T3-50"]
+    SUB_TIERS = ["center", "center+low_resolution"]
+    
+    EPOCHS_FOR_TRAIN = 5
+    
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    print(f"[*] Native hardware acceleration device: {device}")
+    
+    # --- 1. INITIALIZING BASE STRUCTURES FOR DATA STORAGE ---
+    test_rows = [
+        "Sanity_YOLOv8",
+        "Sanity_MobileNetV2",
+        "T1_1000_Center_YOLOv8",
+        "T1_1000_Center_MobileNetV2",
+        "T1_T2_Combined_YOLOv8",
+        "T1_T2_Combined_MobileNetV2",
+        "Full_Center_YOLOv8",
+        "Full_Center_MobileNetV2"
+    ]
+    
+    results_data = {row: {c: {t: {st: {"correct": 0, "total": 0} for st in SUB_TIERS} for t in TIERS} for c in CLASSES} for
+                    row in test_rows}
+    excluded_cells = {row: {c: {t: {st: False for st in SUB_TIERS} for t in TIERS} for c in CLASSES} for row in test_rows}
+    
+    mobilenet_transform = transforms.Compose([
+        transforms.Resize((128, 128)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    
+    
+    # --- 2. PIPELINE STEP 1: RUN THE SANITY CHECKS ---
+    def evaluate_sanity_baseline(sanity_tasks, yolo_raw, mobilenet_raw):
+        print(f"\n[*] Step 1: Running Sanity Baseline ({len(sanity_tasks)} images)...")
+    
+        IMAGENET_SPARROWS = [11]
+        IMAGENET_PIGEONS = [7]
+        IMAGENET_PARAKEETS = [87, 88, 89, 90]
+        IMAGENET_CROWS = [17, 18, 19, 20]
+        IMAGENET_ALL_BIRDS = list(range(10, 25)) + list(range(80, 101))
+    
+        for expected_class, tier, sub_tier, file_path in tqdm(sanity_tasks, desc="Sanity Testing"):
+            if expected_class == "Other":
+                excluded_cells["Sanity_YOLOv8"][expected_class][tier][sub_tier] = True
+                excluded_cells["Sanity_MobileNetV2"][expected_class][tier][sub_tier] = True
+                continue
+    
+            # YOLOv8 Raw
+            try:
+                res = yolo_raw(file_path, verbose=False)[0]
+                detected = [int(box.cls[0]) for box in res.boxes]
+                yolo_pred = "Other" if 14 in detected else "Unknown"
+                results_data["Sanity_YOLOv8"][expected_class][tier][sub_tier]["total"] += 1
+                if yolo_pred == expected_class:
+                    results_data["Sanity_YOLOv8"][expected_class][tier][sub_tier]["correct"] += 1
+            except Exception:
+                pass
+    
+            # MobileNetV2 Raw
+            try:
+                img = Image.open(file_path).convert('RGB')
+                img_t = mobilenet_transform(img).unsqueeze(0).to(device)
+                with torch.no_grad():
+                    out = mobilenet_raw(img_t)
+                    _, pred_idx = torch.max(out, 1)
+                    pred_idx = pred_idx.item()
+    
+                if pred_idx in IMAGENET_SPARROWS:
+                    mb_pred = "House_Sparrow"
+                elif pred_idx in IMAGENET_PIGEONS:
+                    mb_pred = "Feral_Pigeon"
+                elif pred_idx in IMAGENET_PARAKEETS:
+                    mb_pred = "Rose_ringed_Parakeet"
+                elif pred_idx in IMAGENET_CROWS:
+                    mb_pred = "Hooded_Crow"
+                elif pred_idx in IMAGENET_ALL_BIRDS:
+                    mb_pred = "Other"
+                else:
+                    mb_pred = "Non_Bird"
+    
+                results_data["Sanity_MobileNetV2"][expected_class][tier][sub_tier]["total"] += 1
+                if mb_pred == expected_class:
+                    results_data["Sanity_MobileNetV2"][expected_class][tier][sub_tier]["correct"] += 1
+            except Exception:
+                pass
+    
+    
+    # --- 3. PIPELINE STEP 2: DYNAMIC CUSTOM TRAINING ---
+    def train_custom_model_generic(suffix_name, target_tiers):
+        tmp_train_dir = os.path.join(HOME_DIR, 'Desktop', f'tmp_train_{suffix_name}')
+        if os.path.exists(tmp_train_dir):
+            shutil.rmtree(tmp_train_dir, ignore_errors=True)
+    
+        for c in CLASSES:
+            dst_part = os.path.join(tmp_train_dir, c)
+            os.makedirs(dst_part, exist_ok=True)
+    
+            for tier in target_tiers:
+                src_part = os.path.join(DATASET_DIR, c, tier, "center")
+                if os.path.exists(src_part):
+                    # הגבלה נקודתית בלבד לאימון לצורך שמירה על יציבות המערכת ומהירות ריצה
+                    for f in os.listdir(src_part)[:200]:
+                        if f.lower().endswith(('jpg', 'jpeg', 'png')):
+                            shutil.copy(os.path.join(src_part, f), os.path.join(dst_part, f))
+    
+        # אימון MobileNetV2
+        train_dataset = datasets.ImageFolder(root=tmp_train_dir, transform=mobilenet_transform)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    
+        our_mobilenet = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
+        for param in our_mobilenet.parameters():
+            param.requires_grad = False
+    
+        num_ftrs = our_mobilenet.classifier[1].in_features
+        our_mobilenet.classifier = nn.Sequential(nn.Dropout(0.2), nn.Linear(num_ftrs, len(CLASSES)))
+        our_mobilenet = our_mobilenet.to(device)
+    
+        criterion = nn.CrossEntropyLoss()
+        optimizer = optim.Adam(our_mobilenet.classifier.parameters(), lr=0.001)
+    
+        our_mobilenet.train()
+        for epoch in range(EPOCHS_FOR_TRAIN):
+            for inputs, labels in train_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                optimizer.zero_grad()
+                outputs = our_mobilenet(inputs)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
+        our_mobilenet.eval()
+    
+        # אימון YOLOv8
+        yolo_trained = YOLO('yolov8n-cls.pt')
+        yolo_trained.train(data=tmp_train_dir, epochs=EPOCHS_FOR_TRAIN, imgsz=128, verbose=False, device=device.type)
+    
+        try:
+            shutil.rmtree(tmp_train_dir, ignore_errors=True)
+        except Exception:
+            pass
+    
+        return our_mobilenet, yolo_trained, train_dataset.class_to_idx
+    
+    
+    # --- 4. PIPELINE STEP 4: EVALUATION FUNCTION FOR TRAINED MODELS ---
+    def evaluate_trained_pipeline(tasks, our_mobilenet, yolo_trained, class_to_idx, yolo_row_key, mobilenet_row_key):
+        idx_to_class = {v: k for k, v in class_to_idx.items()}
+    
+        for expected_class, tier, sub_tier, file_path in tasks:
+            # טסט YOLOv8
+            try:
+                res = yolo_trained(file_path, verbose=False)[0]
+                top1_idx = res.probs.top1
+                yolo_pred = res.names[top1_idx]
+    
+                results_data[yolo_row_key][expected_class][tier][sub_tier]["total"] += 1
+                if yolo_pred == expected_class:
+                    results_data[yolo_row_key][expected_class][tier][sub_tier]["correct"] += 1
+            except Exception:
+                pass
+    
+            # טסט MobileNetV2
+            try:
+                img = Image.open(file_path).convert('RGB')
+                img_t = mobilenet_transform(img).unsqueeze(0).to(device)
+                with torch.no_grad():
+                    out = our_mobilenet(img_t)
+                    _, pred_idx = torch.max(out, 1)
+                    pred_idx = pred_idx.item()
+    
+                mobilenet_pred = idx_to_class.get(pred_idx, "Unknown")
+    
+                results_data[mobilenet_row_key][expected_class][tier][sub_tier]["total"] += 1
+                if mobilenet_pred == expected_class:
+                    results_data[mobilenet_row_key][expected_class][tier][sub_tier]["correct"] += 1
+            except Exception:
+                pass
+    
+    
+    # --- 5. DRAWING THE MASTER COMBINED MATRIX ---
+    def draw_combined_hierarchical_matrix():
+        fig, axes = plt.subplots(1, len(CLASSES), figsize=(28, 12), sharey=True)
+        sns.set_theme(style="white")
+    
+        x_sub_labels = ["center", "center+\nlow_res", "center", "center+\nlow_res", "center", "center+\nlow_res"]
+    
+        y_display_labels = [
+            "YOLOv8 (Raw Baseline)", "MobileNetV2 (Raw Baseline)",
+            "YOLOv8 (T1 Trained)", "MobileNetV2 (T1 Trained)",
+            "YOLOv8 (T1+T2 Trained)", "MobileNetV2 (T1+T2 Trained)",
+            "YOLOv8 (Full Center Trained)", "MobileNetV2 (Full Center Trained)"
+        ]
+    
+        base_cmap = plt.get_cmap("YlGnBu")
+        cmap_colors = base_cmap(np.linspace(0, 1, 256))
+        custom_cmap = mcolors.ListedColormap(cmap_colors)
+        custom_cmap.set_under('#eaecee')
+    
+        for idx, class_name in enumerate(CLASSES):
+            ax = axes[idx]
+    
+            class_matrix = []
+            annotation_matrix = []
+    
+            for row_name in test_rows:
+                test_row_values = []
+                test_row_annotations = []
+                for tier in TIERS:
+                    for sub_tier in SUB_TIERS:
+                        if excluded_cells[row_name][class_name][tier][sub_tier]:
+                            test_row_values.append(-5.0)
+                            test_row_annotations.append("N/A")
+                        else:
+                            data = results_data[row_name][class_name][tier][sub_tier]
+                            acc = (data["correct"] / data["total"] * 100) if data["total"] > 0 else 0.0
+                            test_row_values.append(acc)
+                            test_row_annotations.append(f"{acc:.1f}")
+                class_matrix.append(test_row_values)
+                annotation_matrix.append(test_row_annotations)
+    
+            matrix_np = np.array(class_matrix)
+            annot_np = np.array(annotation_matrix)
+    
+            sns.heatmap(matrix_np, annot=annot_np, fmt="", cmap=custom_cmap, cbar=False, vmin=0, vmax=100,
+                        xticklabels=x_sub_labels, yticklabels=y_display_labels if idx == 0 else False,
+                        linewidths=2, linecolor="white", square=False, ax=ax,
+                        annot_kws={"size": 10, "weight": "bold"})
+    
+            ax.set_title(f"Species: {class_name}", fontsize=14, weight='bold', pad=45)
+    
+            ax.text(0.16, 1.05, "T1-1000", transform=ax.transAxes, ha="center", va="center", fontsize=11, weight="bold",
+                    color="#2c3e50")
+            ax.text(0.50, 1.05, "T2-150", transform=ax.transAxes, ha="center", va="center", fontsize=11, weight="bold",
+                    color="#2c3e50")
+            ax.text(0.84, 1.05, "T3-50", transform=ax.transAxes, ha="center", va="center", fontsize=11, weight="bold",
+                    color="#2c3e50")
+    
+            ax.axvline(x=2, color="gray", linestyle="--", linewidth=1, alpha=0.6)
+            ax.axvline(x=4, color="gray", linestyle="--", linewidth=1, alpha=0.6)
+    
+            ax.set_xticklabels(x_sub_labels, fontsize=9, weight='bold')
+    
+            if idx == 0:
+                ax.set_yticklabels(y_display_labels, fontsize=11, weight='bold', rotation=0)
+    
+                ax.text(-0.65, 0.87, "TEST 1:\nSanity Baseline", transform=ax.transAxes, ha="center", va="center",
+                        fontsize=9, weight="bold", color="#c0392b",
+                        bbox=dict(facecolor='#f9ebea', edgecolor='#e6b0aa', boxstyle='round,pad=0.3'))
+                ax.text(-0.65, 0.62, "TEST 2:\nT1_Center Trained", transform=ax.transAxes, ha="center", va="center",
+                        fontsize=9, weight="bold", color="#27ae60",
+                        bbox=dict(facecolor='#e8f8f5', edgecolor='#a3e4d7', boxstyle='round,pad=0.3'))
+                ax.text(-0.65, 0.37, "TEST 3:\nCombined Trained", transform=ax.transAxes, ha="center", va="center",
+                        fontsize=9, weight="bold", color="#2980b9",
+                        bbox=dict(facecolor='#ebf5fb', edgecolor='#a9cce3', boxstyle='round,pad=0.3'))
+                ax.text(-0.65, 0.12, "TEST 4:\nFull Trained", transform=ax.transAxes, ha="center", va="center",
+                        fontsize=9, weight="bold", color="#8e44ad",
+                        bbox=dict(facecolor='#f4ecf7', edgecolor='#d2b4de', boxstyle='round,pad=0.3'))
+    
+        plt.suptitle("SYSTEM EVALUATION MASTER MATRIX - HIERARCHICAL ANALYSIS", fontsize=16, weight='bold', y=0.03)
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.75, bottom=0.15, left=0.22, right=0.98)
+    
+        plt.savefig(OUTPUT_IMAGE_PATH, dpi=300)
+        plt.close()
+    
+        print(f"\n[V] Master Matrix updated and generated successfully with all dataset targets!")
+        print(f"[V] Saved to: {OUTPUT_IMAGE_PATH}")
+    
+    
+    # --- 6. MAIN CONTROLLER ---
+    def main():
+        if not os.path.exists(DATASET_DIR):
+            print(f"[X] DB not found at: {DATASET_DIR}")
+            return
+    
+        sanity_tasks = []
+        test2_tasks = []
+        test3_tasks = []
+        test4_tasks = []
+    
+        for class_name in CLASSES:
+            class_folder = os.path.join(DATASET_DIR, class_name)
+            if not os.path.exists(class_folder): continue
+            for tier in TIERS:
+                for sub_tier in SUB_TIERS:
+                    disk_sub_tier = "FT" if sub_tier == "center+low_resolution" else sub_tier
+                    target_folder_disk = os.path.join(class_folder, tier, disk_sub_tier)
+    
+                    if not os.path.exists(target_folder_disk): continue
+                    # עדכון: קורא את כל הקבצים ומוריד את הגבלת ה-MAX_IMAGES_PER_SUBTIER בטסטים
+                    files = [f for f in os.listdir(target_folder_disk) if f.lower().endswith(('jpg', 'jpeg', 'png'))]
+    
+                    for f in files:
+                        full_path = os.path.join(target_folder_disk, f)
+    
+                        # א) Sanity Baseline - רץ על כל הדאטה הקיים בתיקיות
+                        sanity_tasks.append((class_name, tier, sub_tier, full_path))
+    
+                        # ב) TEST 2: נבחן על כל התמונות ב-T2 ו-T3. מחרים את T1.
+                        if tier != "T1-1000":
+                            test2_tasks.append((class_name, tier, sub_tier, full_path))
+                        else:
+                            excluded_cells["T1_1000_Center_YOLOv8"][class_name][tier][sub_tier] = True
+                            excluded_cells["T1_1000_Center_MobileNetV2"][class_name][tier][sub_tier] = True
+    
+                        # ג) TEST 3: נבחן על כל התמונות ב-T3. מחרים את T1, T2.
+                        if tier == "T3-50":
+                            test3_tasks.append((class_name, tier, sub_tier, full_path))
+                        else:
+                            excluded_cells["T1_T2_Combined_YOLOv8"][class_name][tier][sub_tier] = True
+                            excluded_cells["T1_T2_Combined_MobileNetV2"][class_name][tier][sub_tier] = True
+    
+                        # ד) TEST 4: נבחן על כל התמונות ב-T3. מחרים את T1, T2.
+                        if tier == "T3-50":
+                            test4_tasks.append((class_name, tier, sub_tier, full_path))
+                        else:
+                            excluded_cells["Full_Center_YOLOv8"][class_name][tier][sub_tier] = True
+                            excluded_cells["Full_Center_MobileNetV2"][class_name][tier][sub_tier] = True
+    
+        # ריצת שלב 1: Sanity Baseline
+        yolo_raw = YOLO('yolov8n.pt')
+        mobilenet_raw = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT).to(device).eval()
+        evaluate_sanity_baseline(sanity_tasks, yolo_raw, mobilenet_raw)
+    
+        # ריצת שלב 2: TEST 2 (T1 Center Trained)
+        print("\n[*] Running Pipeline for TEST 2 (T1 Center Trained)...")
+        m2_mobilenet, m2_yolo, class_to_idx = train_custom_model_generic(suffix_name="test2", target_tiers=["T1-1000"])
+        evaluate_trained_pipeline(test2_tasks, m2_mobilenet, m2_yolo, class_to_idx, "T1_1000_Center_YOLOv8",
+                                  "T1_1000_Center_MobileNetV2")
+    
+        # ריצת שלב 3: TEST 3 (T1 + T2 Combined Center Trained)
+        print("\n[*] Running Pipeline for TEST 3 (T1 + T2 Combined Center Trained)...")
+        m3_mobilenet, m3_yolo, class_to_idx_m3 = train_custom_model_generic(suffix_name="test3",
+                                                                            target_tiers=["T1-1000", "T2-150"])
+        evaluate_trained_pipeline(test3_tasks, m3_mobilenet, m3_yolo, class_to_idx_m3, "T1_T2_Combined_YOLOv8",
+                                  "T1_T2_Combined_MobileNetV2")
+    
+        # ריצת שלב 4: TEST 4 (Full 1200 Center Trained)
+        print("\n[*] Running Pipeline for TEST 4 (Full Center Trained)...")
+        m4_mobilenet, m4_yolo, class_to_idx_m4 = train_custom_model_generic(suffix_name="test4",
+                                                                            target_tiers=["T1-1000", "T2-150", "T3-50"])
+        evaluate_trained_pipeline(test4_tasks, m4_mobilenet, m4_yolo, class_to_idx_m4, "Full_Center_YOLOv8",
+                                  "Full_Center_MobileNetV2")
+    
+        # שלב אחרון: הפקת הגרף
+        draw_combined_hierarchical_matrix()
+    
+    
+    if __name__ == "__main__":
+        main()
