@@ -1,0 +1,365 @@
+"""
+-------------------------------------------------------------------------------
+Project: Trail-Cam: Smart Wildlife Detection Camera (MVP)
+Authors: Hodaya Hariri & Ido Hasson (Group 106)
+Hardware: OpenMV N6, PIR Sensor, WiFi Shield
+Description:
+    This script handles the main execution flow for an edge-computing wildlife
+    camera tailored for urban bird monitoring. It optimizes power consumption
+    by keeping the camera sensor idle until a PIR sensor wakes the system.
+    Once active, a dedicated snapshot is captured, followed by frame-differencing
+    to focus/target valid objects. Finally, an on-device TinyML model (.tflite)
+    recognizes urban species (Pigeon / House Sparrow) and streams JSON alerts
+    over WiFi via raw TCP sockets directly to Supabase REST API.
+-------------------------------------------------------------------------------
+"""
+import sensor
+import time
+import network
+import socket
+import json
+import os
+import ml
+from machine import Pin, SDCard, RTC
+
+# --- SSL: try ussl first (some firmware builds), fall back to ssl ---
+try:
+    import ussl as ssl
+except ImportError:
+    import ssl
+
+# ----------------------- CONFIGURATION ----------------------
+WIFI_SSID = "huji"
+WIFI_KEY  = "huji"
+
+# --- Supabase ---
+SUPABASE_HOST  = "pxkevqlcaiazhgqrxbsp.supabase.co"
+SUPABASE_KEY   = "sb_publishable_igo1VwAo9FEGetZssdbFZQ_gOBRLIi3"
+SUPABASE_TABLE = "Observations"
+
+# Fixed deployment location tag — update per physical camera placement
+CAMERA_LOCATION = "Urban Garden - Site A"
+
+PHOTO_INTERVAL           = 2          # Seconds between photos in the same session
+NO_MOTION_TIMEOUT        = 5          # Seconds without motion to close the session
+DIFF_THRESHOLD           = (25, 255)  # Threshold for background subtraction (blob detection)
+MIN_CONFIDENCE_FOR_ALERT = 0.85       # Minimum AI confidence (85%) required to trigger WiFi transmission
+
+# Target urban bird species deployment
+LABELS         = ["Pigeon", "House Sparrow"]
+MODEL_FILENAME = "model_int8.tflite"  # todo: update to .tflite once conversion is resolved
+
+# ----------------------- WIFI FUNCTIONS ---------------------
+def connect_wifi():
+    """
+    Activates the WiFi module and connects to the specified network.
+    Monitors connection status with a strict timeout to prevent battery drain.
+    Returns:
+        bool: True if successfully connected, False otherwise.
+    """
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    print("Turning on WiFi...")
+    try:
+        wlan.connect(WIFI_SSID, WIFI_KEY)
+        timeout = 100
+        while not wlan.isconnected() and timeout > 0:
+            time.sleep_ms(100)
+            timeout -= 1
+        if wlan.isconnected():
+            print("Connected to WiFi! IP:", wlan.ifconfig()[0])
+            return True
+        else:
+            print("WiFi Connection Timeout!")
+            return False
+    except Exception as e:
+        print("WiFi setup failed:", e)
+        return False
+
+def disconnect_wifi():
+    """
+    Disconnects from the WiFi network and deactivates the module
+    to maximize energy efficiency and save battery power.
+    """
+    try:
+        wlan = network.WLAN(network.STA_IF)
+        wlan.disconnect()
+        wlan.active(False)
+        print("WiFi disconnected to save battery.")
+    except Exception as e:
+        pass
+
+# ----------------------- SUPABASE FUNCTION ------------------
+def send_to_supabase(label, bird_count):
+    """
+    Inserts a bird detection record into the Supabase 'Observations' table
+    via a raw HTTPS POST to the Supabase REST API over port 443.
+
+    Payload fields match the confirmed working schema:
+        - eventtime    : ISO 8601 timestamp from the on-board RTC
+        - birds species: Classified bird label (e.g. "Pigeon")
+        - location     : Fixed deployment location string from CAMERA_LOCATION
+        - amount       : Number of birds detected in this frame
+
+    Args:
+        label      (str): The classified bird species name.
+        bird_count (int): Count of detected birds in the frame.
+    """
+    if not connect_wifi():
+        return
+
+    print("Sending observation to Supabase...")
+    s = None
+    try:
+        # Build timestamp from RTC
+        t         = rtc.datetime()
+        eventtime = "%04d-%02d-%02dT%02d:%02d:%02d" % (t[0], t[1], t[2], t[4], t[5], t[6])
+
+        # Build payload — column names match Supabase table exactly
+        payload        = json.dumps({
+            "eventtime"    : eventtime,
+            "birds species": label,
+            "location"     : CAMERA_LOCATION,
+            "amount"       : bird_count
+        })
+        content_length = len(payload)
+
+        # Open TCP + TLS connection to Supabase
+        addr = socket.getaddrinfo(SUPABASE_HOST, 443)[0][-1]
+        s    = socket.socket()
+        s.settimeout(10.0)
+        s.connect(addr)
+        s    = ssl.wrap_socket(s, server_hostname=SUPABASE_HOST)
+
+        # Build and send HTTP POST request
+        request = (
+            "POST /rest/v1/%s HTTP/1.0\r\n"
+            "Host: %s\r\n"
+            "apikey: %s\r\n"
+            "Authorization: Bearer %s\r\n"
+            "Content-Type: application/json\r\n"
+            "Prefer: return=minimal\r\n"
+            "Content-Length: %d\r\n"
+            "\r\n"
+            "%s"
+        ) % (SUPABASE_TABLE, SUPABASE_HOST, SUPABASE_KEY, SUPABASE_KEY, content_length, payload)
+
+        s.send(bytes(request, 'utf8'))
+
+        # Read response status line
+        response    = b""
+        while True:
+            try:
+                chunk = s.recv(256)
+                if not chunk:
+                    break
+                response += chunk
+            except:
+                break
+
+        status_line = response.split(b'\r\n')[0].decode('utf-8')
+        print(">>> Supabase Reply:", status_line)
+
+        if "201" in status_line:
+            print(">>> Observation saved to Supabase! [%s x%d @ %s]" % (label, bird_count, eventtime))
+        else:
+            print(">>> WARNING: Unexpected response — check table schema / API key.")
+
+    except Exception as e:
+        print("Failed to send to Supabase:", e)
+    finally:
+        if s is not None:
+            try: s.close()
+            except: pass
+        disconnect_wifi()
+
+# ----------------------- SD CARD & RTC SETUP ----------------
+sd_available = False
+try:
+    sd = SDCard()
+    os.mount(sd, '/sd')
+    print("SD card mounted successfully!")
+    sd_available = True
+except Exception as e:
+    print("SD card mount failed:", e)
+
+rtc = RTC()
+
+def get_last_session_id():
+    """
+    Reads the tracking index from the SD card to ensure session
+    numbering remains continuous across device reboots.
+    Returns:
+        int: The last saved session integer index.
+    """
+    if not sd_available: return 0
+    try:
+        if "last_session.txt" in os.listdir("/sd"):
+            with open("/sd/last_session.txt", "r") as f:
+                return int(f.read())
+        return 0
+    except: return 0
+
+def increment_session_id(current_id):
+    """
+    Overwrites the persistence tracker on the SD card with the updated session ID.
+    Args:
+        current_id (int): The active session index to be incremented.
+    """
+    if not sd_available: return
+    try:
+        with open("/sd/last_session.txt", "w") as f:
+            f.write(str(current_id + 1))
+    except: pass
+
+global_session_id = get_last_session_id()
+increment_session_id(global_session_id)
+
+# ----------------------- AI MODEL SETUP ---------------------
+net = None
+if sd_available:
+    try:
+        if MODEL_FILENAME in os.listdir("/sd"):
+            net = ml.Model("/sd/" + MODEL_FILENAME)
+            print("AI Model (%s) loaded successfully!" % MODEL_FILENAME)
+        else:
+            print("ERROR: %s NOT FOUND on SD card!" % MODEL_FILENAME)
+    except Exception as e:
+        print("AI Model load error:", e)
+
+# ----------------------- CAMERA SETUP -----------------------
+sensor.reset()
+sensor.set_pixformat(sensor.RGB565)
+sensor.set_framesize(sensor.QVGA)  # 320x240 resolution standard for TinyML Micro
+sensor.skip_frames(time=2000)
+sensor.set_auto_whitebal(False)
+# Lock exposure to prevent motion blur of fast-moving birds (20ms exposure)
+# Note: Comment out or set to True if debugging indoors under low light conditions.
+# sensor.set_auto_exposure(False, exposure_us=20000)
+sensor.set_auto_exposure(False, exposure_us=5000)
+
+# ----------------------- HARDWARE & STATE -------------------
+pir              = Pin("P11", Pin.IN, Pin.PULL_UP)
+session_active   = False
+last_motion_time = 0
+last_photo_time  = 0
+motion_index     = 0
+bg_img           = sensor.alloc_extra_fb(sensor.width(), sensor.height(), sensor.RGB565)
+
+# ----------------------- IMAGE PROCESSING & AI --------------
+def is_valid_target(blob):
+    """
+    Validates detected movement regions to prevent false edge triggers.
+    Filters out background noise using bounding box size limits and
+    verifies the target is sufficiently centered inside the viewport frame.
+    Args:
+        blob (image.blob): MicroPython image blob structure.
+    Returns:
+        bool: True if properties meet strict hardware filters, False otherwise.
+    """
+    min_width,  max_width  = 40, 200
+    min_height, max_height = 40, 180
+    if blob.w() < min_width  or blob.w() > max_width:  return False
+    if blob.h() < min_height or blob.h() > max_height: return False
+    margin = 20
+    if blob.x() < margin or (blob.x() + blob.w()) > (320 - margin): return False
+    if blob.y() < margin or (blob.y() + blob.h()) > (240 - margin): return False
+    return True
+
+def classify_raptor(img, roi):
+    """
+    Executes an on-device TensorFlow Lite Micro model prediction
+    restricted to the localized Region of Interest bounding box.
+    Args:
+        img (image.Image): Full frame matrix capture.
+        roi (tuple): Selected bounding coordinates (x, y, w, h).
+    Returns:
+        tuple: (Assigned label text string, Floating-point confidence score).
+    """
+    if net is None:
+        return "Model_Missing", 0.0
+    print("AI Inference starting...")
+    try:
+        predictions = net.predict([img], roi=roi)
+        output      = predictions[0]
+        idx         = output.index(max(output))
+        conf        = output[idx]
+        print(">>> AI RESULT: %s (%2.1f%%)" % (LABELS[idx], conf * 100))
+        return LABELS[idx], conf
+    except Exception as e:
+        print("Inference failed:", e)
+        return "Error", 0.0
+
+# ----------------------- MAIN EXECUTION LOOP ----------------
+print("Ready for Urban Bird detection! Waiting for Motion...")
+disconnect_wifi()  # Maintain zero-power footprint on startup
+
+while True:
+    now     = time.time()
+    pir_val = pir.value()
+
+    # Hardware Wake-Up Trigger via External Interrupt Line (PIR Low)
+    if pir_val == 0:
+        if not session_active:
+            print(">>> MOTION DETECTED (PIR)")
+            session_active  = True
+            motion_index   += 1
+            img             = sensor.snapshot()
+            bg_img.replace(img)
+            last_photo_time = now - PHOTO_INTERVAL
+        last_motion_time = now
+
+    # Active Session Logic
+    if session_active:
+        if (now - last_photo_time) >= PHOTO_INTERVAL:
+
+            # 1. Capture frame
+            img = sensor.snapshot()
+
+            # 2. Frame differencing — isolate moving regions
+            working_img = img.copy()
+            working_img.difference(bg_img)
+            blobs = working_img.find_blobs([DIFF_THRESHOLD], pixels_threshold=400, merge=True)
+
+            if blobs:
+                valid_blobs = [b for b in blobs if is_valid_target(b)]
+                if valid_blobs:
+                    bird_count = len(valid_blobs)
+                    target     = max(valid_blobs, key=lambda b: b.pixels())
+
+                    # 3. AI classification on the dominant blob ROI
+                    label, confidence = classify_raptor(img, target.rect())
+                    last_photo_time   = now
+
+                    # 4. Save annotated image to SD card
+                    if sd_available:
+                        try:
+                            t     = rtc.datetime()
+                            fname = "/sd/S%d_M%d_%s_%02d%02d.jpg" % (
+                                global_session_id, motion_index,
+                                label.replace(" ", "_"), t[5], t[6]
+                            )
+                            img.draw_rectangle(target.rect(), color=(0, 255, 0))
+                            img.draw_string(
+                                target.x(), target.y() - 12,
+                                "%s %d%%" % (label, confidence * 100),
+                                color=(0, 255, 0)
+                            )
+                            img.save(fname, quality=90)
+                            print("Saved image to SD: %s" % fname)
+                        except Exception as e:
+                            print("SD save failed:", e)
+
+                    # 5. Transmit to Supabase if confidence threshold is met
+                    if (confidence >= MIN_CONFIDENCE_FOR_ALERT
+                            and label != "Error"
+                            and label != "Model_Missing"):
+                        send_to_supabase(label, bird_count)
+
+        # Close session after inactivity timeout
+        if (now - last_motion_time) >= NO_MOTION_TIMEOUT:
+            print("Session closed. Waiting for motion...")
+            session_active = False
+
+    # Dynamic sleep to optimize power consumption
+    time.sleep_ms(100 if not session_active else 10)
