@@ -46,7 +46,7 @@ DIFF_THRESHOLD           = (25, 255)  # Threshold for background subtraction (bl
 MIN_CONFIDENCE_FOR_ALERT = 0.85       # Minimum AI confidence (85%) required to trigger WiFi transmission
 
 # Target urban bird species deployment
-LABELS         = ["Pigeon", "House Sparrow"]
+LABELS = ["House Sparrow", "Feral Pigeon", "Hooded Crow", "Rose ringed Parakeet", "Other"]
 MODEL_FILENAME = "model_int8.tflite"  # todo: update to .tflite once conversion is resolved
 
 # ----------------------- WIFI FUNCTIONS ---------------------
