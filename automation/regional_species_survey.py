@@ -24,7 +24,6 @@ EBIRD_API_KEY = "kuj19arnk19s"
 SUPABASE_URL = "https://pxkevqlcaiazhgqrxbsp.supabase.co"
 SUPABASE_KEY = "sb_publishable_igo1VwAo9FEGetZssdbFZQ_gOBRLIi3"
 
-
 def get_supabase_client() -> Optional[Client]:
     """Initializes and returns a Supabase client using embedded credentials."""
     try:
@@ -33,8 +32,8 @@ def get_supabase_client() -> Optional[Client]:
         print(f"⚠️ Failed to initialize Supabase client: {e}")
         return None
 
-
-def fetch_regional_observations(
+def fetch_regional_observations
+(
     target_species: List[str],
     lat: float,
     lng: float,
@@ -42,11 +41,11 @@ def fetch_regional_observations(
     days: int = 90,
     sync_to_db: bool = False,
     api_key: str = EBIRD_API_KEY
-) -> List[Dict]:
+) 
+-> List[Dict]:
     """
     Fetches bird observations for specified target species within a given coordinate radius
     over the past X days using the eBird 2.0 API.
-
     :param target_species: List of common bird names to query (e.g., ['House Sparrow', 'Feral Pigeon']).
     :param lat: Latitude of the targeted deployment zone.
     :param lng: Longitude of the targeted deployment zone.
@@ -58,21 +57,18 @@ def fetch_regional_observations(
     """
     print(f"📡 [Survey Initialized] Area: ({lat}, {lng}) | Radius: {radius_km} km | Lookback: {days} days")
     print(f"🎯 Target Species ({len(target_species)}): {', '.join(target_species)}")
-
     headers = {"X-eBirdApiToken": api_key}
     normalized_targets = [s.strip().lower() for s in target_species]
-    
     all_matched_observations = []
     seen_records = set()
-    
     # eBird API partitions historical queries into 30-day lookup chunks
     for chunk in range(0, days, 30):
         chunk_days = min(30, days - chunk)
         end_date = datetime.now() - timedelta(days=chunk)
-        
         if chunk == 0:
             url = "https://api.ebird.org/v2/data/obs/geo/recent"
-            params = {
+            params = 
+            {
                 "lat": lat,
                 "lng": lng,
                 "dist": radius_km,
@@ -82,7 +78,8 @@ def fetch_regional_observations(
         else:
             target_date_str = end_date.strftime("%Y/%m/%d")
             url = f"https://api.ebird.org/v2/data/obs/geo/historic/{target_date_str}"
-            params = {
+            params = 
+            {
                 "lat": lat,
                 "lng": lng,
                 "dist": radius_km,
@@ -96,10 +93,10 @@ def fetch_regional_observations(
                 continue
             response.raise_for_status()
             records = response.json()
-            
             for rec in records:
                 com_name = rec.get("comName", "")
-                is_match = any(
+                is_match = any
+                (
                     target == com_name.lower() or target in com_name.lower()
                     for target in normalized_targets
                 )
@@ -108,12 +105,12 @@ def fetch_regional_observations(
                     record_key = (com_name, rec.get("locId"), rec.get("obsDt"))
                     if record_key not in seen_records:
                         seen_records.add(record_key)
-                        
                         obs_dt = rec.get("obsDt", "")
                         if len(obs_dt) == 10:
                             obs_dt += " 00:00"
                             
-                        parsed_record = {
+                        parsed_record = 
+                        {
                             "bird_name": com_name,
                             "scientific_name": rec.get("sciName", ""),
                             "location_name": rec.get("locName", "Unknown Location"),
@@ -141,7 +138,8 @@ def fetch_regional_observations(
             print(f"💾 Synchronizing {len(all_matched_observations)} records to Supabase 'urban_observations' table...")
             for obs in all_matched_observations:
                 try:
-                    db_payload = {
+                    db_payload = 
+                    {
                         "bird_name": obs["bird_name"],
                         "location": obs["location_name"],
                         "observed_at": obs["observed_at"],
