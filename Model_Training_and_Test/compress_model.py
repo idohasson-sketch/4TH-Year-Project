@@ -30,7 +30,7 @@ def quantize_onnx_model(input_path: str, output_path: str):
     quantized_size = os.path.getsize(output_path) / (1024 * 1024)
     reduction = ((original_size - quantized_size) / original_size) * 100
     print(f"[V] Quantization Complete -> {output_path}")
-    print(f"    Original: {original_size:.2f} MB | Quantized: {quantized_size:.2f} MB (-{reduction:.1f}%)")
+    print(f" Original: {original_size:.2f} MB | Quantized: {quantized_size:.2f} MB (-{reduction:.1f}%)")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="A-EYE Tracker ONNX INT8 Quantizer")
