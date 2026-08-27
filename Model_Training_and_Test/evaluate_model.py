@@ -95,7 +95,7 @@ def evaluate_single_cell(
         return 0.0
 
     correct, total = 0, 0
-    CONF_THRESHOLD = 0.20
+    CONF_THRESHOLD = 0.50
 
     if model_type == "mobilenet_quantized":
         transform = transforms.Compose([
