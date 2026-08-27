@@ -20,8 +20,8 @@ An autonomous, ultra-low-power smart trail camera built upon the OpenMV platform
 ## 👥 The Team
 
 ### Team Members
-* **Ido Hasson** — ido.hasson@mail.huji.ac.il (The Hebrew University of Jerusalem)
-* **Hodaya Hariri** — hodaya.hariri@mail.huji.ac.il (The Hebrew University of Jerusalem)
+* **Ido Hasson** - ido.hasson@mail.huji.ac.il (The Hebrew University of Jerusalem)
+* **Hodaya Hariri** - hodaya.hariri@mail.huji.ac.il (The Hebrew University of Jerusalem)
 
 ### Supervisors & Mentors
 * **Academic Advisor:** Meir Eizenberg (mauroe@savion.huji.ac.il)
@@ -37,14 +37,14 @@ Real-time wildlife monitoring in remote habitats is often constrained by severe 
 **A-EYE TRACKER** addresses this by shifting computational vision directly to the edge. The system stays in a low-power deep sleep until an external PIR sensor detects movement via hardware interrupts. The OpenMV camera module snaps a frame, executes local INT8 quantized TinyML inference across 5 distinct categories (4 regional target species + "Other"), and asynchronously synchronizes verified observations to the cloud database and Telegram alerts.
 
 ### Key Features
-* **Decoupled Power Architecture:** Passive Infrared (PIR) sensor wakes the microcontroller via hardware interrupts, maintaining an ultra-low standby power footprint.
+* **Decoupled Power Architecture:** Passive Infrared (PIR) sensor wakes the microcontroller via hardware interrupts, maintaining an ultra low standby power footprint.
 * **On-Device TinyML Inference:** Local classification using a quantized INT8 MobileNetV2 architecture running on the OpenMV N6 microcontroller.
 * **High-Accuracy Edge Model:** Achieves 87.8% field accuracy across 5 categories, matching the accuracy of large-scale baseline models (YOLOv8) on closed sets.
 * **Automated Data Pipelines:** Asynchronous synchronization to Supabase SQL backend and real-time incident alerting via Telegram within <90 seconds.
 * **Modular & Generic Architecture:** Centralized pipeline to mine regional data, balance datasets, and re-train models for any target ecosystem.
 
 ### Main Components
-* **Hardware Unit:** OpenMV Cam N6, Low-Power PIR Motion Sensor, Wide-Angle Camera Lens, Integrated LED Lighting Module, Dedicated Wi-Fi Module, and Li-Po Battery Pack.
+* **Hardware Unit:** OpenMV Cam N6, Low Power PIR Motion Sensor, Wide Angle Camera Lens, Integrated LED Lighting Module, Dedicated Wi-Fi Module, and LiPo Battery Pack.
 * **Backend & Analytics:** Supabase (PostgreSQL), Grafana Monitoring Dashboard, Telegram Bot API.
 
 ### Main Technologies
@@ -132,24 +132,24 @@ Run a live sanity test on the OpenMV board:
 
 ## 🚀 Deployment & Cloud Portals
 
-* **Field Housing:** Enclose the OpenMV board, PIR sensor, and battery inside a weather-resistant casing.
+* **Field Housing:** Enclose the OpenMV board, PIR sensor, and battery inside a weather resistant casing.
 * **Camera & Sensor Placement:** Mount the PIR sensor directed toward the target area to ensure fast interrupt triggering before frame capture.
 * **Live Telemetry, Database & Alert Channels:**
-  * 📊 [Grafana Live Observation Dashboard](https://idohasson.grafana.net/d/idnnshv/observation-main-dashboard?orgId=1&from=now-90d&to=now&timezone=browser&var-query0=&var-observation_id=$__all&dtab=General-Info) — Real-time telemetry, bird detection trends, and system status logs.
-  * 🗄️ [Supabase Cloud Project Portal](https://supabase.com/dashboard/project/pxkevqlcaiazhgqrxbsp/settings/general) — Centralized SQL database management and media storage.
-  * 📲 [Telegram Live Channel (A Eye Tracker - Live)](https://web.telegram.org/a/#-1003619060769) — Real-time automated detection alerts and image feed.
+  * 📊 [Grafana Live Observation Dashboard](https://idohasson.grafana.net/d/idnnshv/observation-main-dashboard?orgId=1&from=now-90d&to=now&timezone=browser&var-query0=&var-observation_id=$__all&dtab=General-Info) - Real time telemetry, bird detection trends, and system status logs.
+  * 🗄️ [Supabase Cloud Project Portal](https://supabase.com/dashboard/project/pxkevqlcaiazhgqrxbsp/settings/general) - Centralized SQL database management and media storage.
+  * 📲 [Telegram Live Channel (A Eye Tracker - Live)](https://web.telegram.org/a/#-1003619060769) - Real-time automated detection alerts and image feed.
 
 ---
 
 ## ⚙️ Built With
 
-* [OpenMV](https://openmv.io/) — Edge machine vision hardware & MicroPython engine.
-* [PyTorch](https://pytorch.org/) — Deep learning framework used for transfer learning.
-* [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) — Object detection used for bounding-box Smart Cropping.
-* [Supabase](https://supabase.com/) — Cloud backend and PostgreSQL storage.
-* [Grafana](https://grafana.com/) — Real-time telemetry, dashboards, and alerting.
-* [Telegram Bot API](https://core.telegram.org/bots/api) — Incident alerting and media dispatch pipeline.
-* [iNaturalist](https://www.inaturalist.org/) — Verified research-grade wildlife dataset sourcing.
+* [OpenMV](https://openmv.io/) - Edge machine vision hardware & MicroPython engine.
+* [PyTorch](https://pytorch.org/) - Deep learning framework used for transfer learning.
+* [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) - Object detection used for bounding box Smart Cropping.
+* [Supabase](https://supabase.com/) - Cloud backend and PostgreSQL storage.
+* [Grafana](https://grafana.com/) - Real-time telemetry, dashboards, and alerting.
+* [Telegram Bot API](https://core.telegram.org/bots/api) - Incident alerting and media dispatch pipeline.
+* [iNaturalist](https://www.inaturalist.org/) - Verified research-grade wildlife dataset sourcing.
 
 ---
 
