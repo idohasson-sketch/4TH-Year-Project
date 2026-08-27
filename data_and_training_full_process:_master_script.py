@@ -28,45 +28,44 @@ SCRIPT_PHASE_2 = "phase_2:_data_processing_centering_full_quality.py"
 SCRIPT_PHASE_3 = "phase_3:_downscale_center_images.py"
 SCRIPT_PHASE_4 = "evaluate_model.py"
 
-
 def run_command(cmd: List[str], stage_name: str) -> None:
     """Executes a subprocess stage with runtime tracking and error handling."""
     print(f"\n{'='*75}")
     print(f"🚀 [STAGE: {stage_name}]")
     print(f"⚙️  Executing: {' '.join(cmd)}")
     print(f"{'='*75}")
-
     start_time = time.time()
     result = subprocess.run(cmd)
     elapsed = time.time() - start_time
-
     if result.returncode != 0:
         print(f"\n[X] CRITICAL FAILURE in stage: '{stage_name}' (Exit Code: {result.returncode})")
         sys.exit(result.returncode)
-
     print(f"\n[V] Completed '{stage_name}' successfully in {elapsed:.1f}s.")
 
-
 def main():
-    parser = argparse.ArgumentParser(
+    parser = argparse.ArgumentParser
+    (
         description="A-EYE Tracker Master Pipeline Orchestrator",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
 
     # Workspace directory paths
-    parser.add_argument(
+    parser.add_argument
+   (
         "--dataset_dir",
         type=str,
         default=os.path.expanduser("~/Desktop/DB"),
         help="Root path for the multi-tiered dataset."
     )
-    parser.add_argument(
+    parser.add_argument
+    (
         "--output_plots_dir",
         type=str,
         default=os.path.expanduser("~/Desktop/evaluation_plots"),
         help="Destination directory for benchmark plots and matrices."
     )
-    parser.add_argument(
+    parser.add_argument
+    (
         "--models_dir",
         type=str,
         default=os.path.expanduser("~/Desktop/exported_models"),
@@ -81,7 +80,6 @@ def main():
     parser.add_argument("--skip_mining", action="store_true", help="Skip Phase 1 (iNaturalist download).")
     parser.add_argument("--skip_preprocessing", action="store_true", help="Skip Phase 2 & Phase 3 (Centering and Downscaling).")
     parser.add_argument("--skip_evaluation", action="store_true", help="Skip Phase 4 (Training and Benchmark evaluation).")
-
     args = parser.parse_args()
 
     # Create destination directories
@@ -91,9 +89,9 @@ def main():
 
     print("="*80)
     print("🌟 A-EYE TRACKER — MASTER PIPELINE INITIALIZATION")
-    print(f"[*] Dataset Root:        {args.dataset_dir}")
-    print(f"[*] Exported Models:     {args.models_dir}")
-    print(f"[*] Output Figures:      {args.output_plots_dir}")
+    print(f"[*] Dataset Root: {args.dataset_dir}")
+    print(f"[*] Exported Models:{args.models_dir}")
+    print(f"[*] Output Figures: {args.output_plots_dir}")
     print(f"[*] Epochs: {args.epochs} | Batch Size: {args.batch_size}")
     print("="*80)
 
@@ -121,13 +119,11 @@ def main():
         run_command([sys.executable, SCRIPT_PHASE_4], "Phase 4: Two-Stage Fine-Tuning & Master Benchmark Matrix")
     else:
         print("\n[-] Skipping Phase 4: Training & Evaluation (--skip_evaluation supplied).")
-
     print("\n" + "="*80)
     print("🎉 MASTER PIPELINE COMPLETED SUCCESSFULLY!")
     print(f"[V] Master Heatmap Matrix & Visual Comparisons -> {args.output_plots_dir}")
     print(f"[V] Quantized Edge INT8 Models & Checkpoints     -> {args.models_dir}")
     print("="*80)
-
 
 if __name__ == "__main__":
     main()
