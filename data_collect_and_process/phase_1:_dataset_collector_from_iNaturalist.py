@@ -34,7 +34,8 @@ HOME_DIR = os.path.expanduser("~")
 DEFAULT_DATASET_DIR = os.path.join(HOME_DIR, 'Desktop', 'DB')
 
 # Default iNaturalist Taxon IDs for Urban Wildlife
-DEFAULT_TARGET_SPECIES = {
+DEFAULT_TARGET_SPECIES = 
+{
     "House_Sparrow": 13858,
     "Feral_Pigeon": 3017,
     "Rose_ringed_Parakeet": 18874,
@@ -42,24 +43,24 @@ DEFAULT_TARGET_SPECIES = {
 }
 
 # Volume scaling tiers (T1 and T2 only; T3 is manually provided)
-DEFAULT_TIERS = {
+DEFAULT_TIERS = 
+{
     "T1-1000": 1000,
     "T2-150": 150
 }
-
 BATCH_SIZE = 50
 
-
-def download_verified_dataset(
+def download_verified_dataset
+(
     target_species: Optional[Dict[str, int]] = None,
     tiers: Optional[Dict[str, int]] = None,
     dataset_dir: str = DEFAULT_DATASET_DIR,
     clean_existing: bool = True
-) -> None:
+) 
+-> None:
     """
     Initializes workspace and manages sequential downloads across defined target
     species and the general 'Other' class. Can be invoked directly from external scripts.
-
     :param target_species: Dictionary mapping species names to iNaturalist Taxon IDs.
     :param tiers: Dictionary mapping tier names to desired image counts (defaults to T1 and T2).
     :param dataset_dir: Destination root folder path for downloaded datasets.
@@ -69,7 +70,6 @@ def download_verified_dataset(
         target_species = DEFAULT_TARGET_SPECIES
     if tiers is None:
         tiers = DEFAULT_TIERS
-
     print(f"[*] Initializing Dataset Acquisition Pipeline...")
     print(f"[*] Target Directory: {dataset_dir}")
     print(f"[*] Target Species ({len(target_species)}): {list(target_species.keys())}")
@@ -79,7 +79,6 @@ def download_verified_dataset(
         print("[*] Cleaning up existing dataset directory...")
         shutil.rmtree(dataset_dir)
     os.makedirs(dataset_dir, exist_ok=True)
-    
     session = requests.Session()
 
     # 1. Download Target Species
@@ -90,15 +89,16 @@ def download_verified_dataset(
     excluded_ids = ",".join(map(str, target_species.values()))
     process_class_download(session, "Other", taxon_id=3, tiers=tiers, dataset_dir=dataset_dir, exclude_ids=excluded_ids)
 
-
-def process_class_download(
+def process_class_download
+(
     session: requests.Session,
     class_name: str,
     taxon_id: int,
     tiers: Dict[str, int],
     dataset_dir: str,
     exclude_ids: Optional[str] = None
-) -> None:
+) 
+-> None:
     """
     Paginates through iNaturalist API responses and downloads verified images
     into designated tier folders for a specific species/class.
@@ -116,7 +116,8 @@ def process_class_download(
         downloaded_in_tier = 0
         while downloaded_in_tier < limit:
             url = "https://api.inaturalist.org/v1/observations"
-            params = {
+            params = 
+           {
                 "taxon_id": taxon_id,
                 "quality_grade": "research",
                 "per_page": BATCH_SIZE,
@@ -167,13 +168,11 @@ def process_class_download(
                         print(f"    -> {tier_name} Progress: {downloaded_in_tier}/{limit} successfully saved.")
 
                     time.sleep(0.05)
-
                 page += 1
 
             except Exception as e:
                 print(f"[X] Connection issue encountered: {e}")
                 time.sleep(2)
-
         print(f"[V] Tier {tier_name} complete for {class_name}.")
 
 
