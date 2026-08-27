@@ -30,11 +30,9 @@ from supabase import create_client, Client
 # ==========================================
 SUPABASE_URL = "https://pxkevqlcaiazhgqrxbsp.supabase.co"
 SUPABASE_KEY = "sb_publishable_igo1VwAo9FEGetZssdbFZQ_gOBRLIi3"
-
 # Telegram Bot API credentials for automated incident alerting
 TELEGRAM_BOT_TOKEN = "8809302299:AAGbuJe1Q9uifxL7ha7zHiQfZ6DYCs90W1k"
 TELEGRAM_CHAT_ID = "-1003921648414"
-
 print("🔄 Connecting to Supabase...")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -51,7 +49,8 @@ def send_telegram_alert(observations):
     total_records = len(observations)
     
     # Header Section
-    message_lines = [
+    message_lines = 
+   [
         "🚨 *A-EYE Tracker - Real-Time Field Report* 🚨",
         f"Synchronized *{total_records}* new detection(s) to the database.\n",
         "--- *Detailed Sighting Logs* ---"
@@ -66,7 +65,8 @@ def send_telegram_alert(observations):
         lat = obs.get("latitude", "N/A")
         lon = obs.get("longitude", "N/A")
         
-        item_block = (
+        item_block = 
+       (
             f"🦉 *Sighting #{idx}: {bird_name}*\n"
             f"  • *Count:* {quantity} unit(s)\n"
             f"  • *Timestamp:* {observed_at}\n"
@@ -74,13 +74,12 @@ def send_telegram_alert(observations):
             f"  • *Coordinates:* `{lat}, {lon}`"
         )
         message_lines.append(item_block)
-        
+
     # Footer Section
     message_lines.append("\n📊 _All records successfully compiled and updated in Supabase._")
-    
     message_text = "\n".join(message_lines)
-
-    payload = {
+    payload = 
+    {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message_text,
         "parse_mode": "Markdown"
@@ -105,7 +104,8 @@ def main():
     and triggers downstream alerting to validate the full automation chain.
     """
     # Simulated observation payload matching the on-device TinyML output schema
-    observations_to_sync = [
+    observations_to_sync = 
+   [
         {
             "bird_name": "House Sparrow",
             "location": "Jerusalem Botanical Gardens, Givat Ram",
@@ -118,7 +118,6 @@ def main():
 
     print(f"⏳ Starting synchronization of {len(observations_to_sync)} observations to Supabase...")
     successful_inserts = []
-
     for obs in observations_to_sync:
         try:
             response = supabase.table("urban_observations").insert(obs).execute()
@@ -127,7 +126,6 @@ def main():
                 print(f"  ✅ Successfully inserted: {obs['bird_name']} at {obs['location']}")
         except Exception as e:
             print(f"  ❌ Failed to insert record into Supabase: {e}")
-
     print(f"\n📊 Sync finished. Total records successfully saved in DB: {len(successful_inserts)}/{len(observations_to_sync)}")
 
     # ==========================================
