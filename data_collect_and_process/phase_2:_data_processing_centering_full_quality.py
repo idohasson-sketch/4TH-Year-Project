@@ -27,10 +27,8 @@ from ultralytics import YOLO
 # --- Directory & Pipeline Configurations ---
 HOME_DIR = os.path.expanduser("~")
 SRC_DATASET_DIR = os.path.join(HOME_DIR, 'Desktop', 'DB')
-
 # COCO Dataset Class Index for 'bird'
 BIRD_CLASS_ID = 14
-
 # Explicit tiers processed in this phase
 VALID_TIERS = {"T1-1000", "T2-150"}
 
@@ -64,14 +62,11 @@ def process_dataset_center(dataset_dir=SRC_DATASET_DIR):
 
         for tier_name in os.listdir(src_class_folder):
             src_tier_folder = os.path.join(src_class_folder, tier_name)
-
             # Ensure processing only the 2 specified tiers (T1-1000 and T2-150)
             if not os.path.isdir(src_tier_folder) or tier_name not in VALID_TIERS:
                 continue
-
             dst_tier_folder = os.path.join(src_class_folder, f"{tier_name}_center")
             os.makedirs(dst_tier_folder, exist_ok=True)
-
             print(f" [->] Processing '{tier_name}' -> Creating '{tier_name}_center'...")
 
             image_files = [f for f in os.listdir(src_tier_folder) if f.lower().endswith(('jpg', 'jpeg', 'png'))]
@@ -81,7 +76,6 @@ def process_dataset_center(dataset_dir=SRC_DATASET_DIR):
             for file_name in image_files:
                 src_file_path = os.path.join(src_tier_folder, file_name)
                 dst_file_path = os.path.join(dst_tier_folder, file_name)
-
                 if os.path.exists(dst_file_path):
                     success_count += 1
                     continue
@@ -91,10 +85,8 @@ def process_dataset_center(dataset_dir=SRC_DATASET_DIR):
                     results = model(src_file_path, verbose=False)[0]
                     boxes = results.boxes
                     bird_boxes = [box for box in boxes if int(box.cls[0]) == BIRD_CLASS_ID]
-
                     img = Image.open(src_file_path).convert('RGB')
                     width, height = img.size
-
                     if bird_boxes:
                         # Select the bird bounding box with highest confidence
                         best_box = max(bird_boxes, key=lambda b: float(b.conf[0]))
@@ -104,12 +96,10 @@ def process_dataset_center(dataset_dir=SRC_DATASET_DIR):
                         # Add 40% proportional padding
                         pad_w = int((xmax - xmin) * 0.4)
                         pad_h = int((ymax - ymin) * 0.4)
-
                         xmin = max(0, xmin - pad_w)
                         ymin = max(0, ymin - pad_h)
                         xmax = min(width, xmax + pad_w)
                         ymax = min(height, ymax + pad_h)
-
                         cropped_img = img.crop((xmin, ymin, xmax, ymax))
                         cropped_img.save(dst_file_path, 'JPEG', quality=100)
                         success_count += 1
@@ -120,14 +110,12 @@ def process_dataset_center(dataset_dir=SRC_DATASET_DIR):
                         ymin = (height - min_dim) // 2
                         xmax = xmin + min_dim
                         ymax = ymin + min_dim
-
                         cropped_img = img.crop((xmin, ymin, xmax, ymax))
                         cropped_img.save(dst_file_path, 'JPEG', quality=100)
                         fallback_count += 1
 
                 except Exception as e:
                     print(f"   [X] Error processing {file_name}: {e}")
-
             print(f" [V] Completed {tier_name}_center: {success_count} smart crops, {fallback_count} center fallbacks.")
 
 
