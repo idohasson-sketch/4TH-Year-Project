@@ -73,6 +73,12 @@ def invoke_training_and_quantization(
     return quant_onnx_path
 
 
+def softmax(x: np.ndarray) -> np.ndarray:
+    """Computes stable softmax for model outputs."""
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum(axis=0)
+
+
 def evaluate_single_cell(
     model_type: str,
     model_obj,
@@ -80,7 +86,7 @@ def evaluate_single_cell(
     category_idx: int,
     folder_path: str
 ) -> float:
-    """Evaluates a single species/tier/resolution folder."""
+    """Evaluates a single species/tier/resolution folder with a 20% confidence threshold."""
     if not os.path.exists(folder_path):
         return 0.0
 
@@ -89,6 +95,7 @@ def evaluate_single_cell(
         return 0.0
 
     correct, total = 0, 0
+    CONF_THRESHOLD = 0.20
 
     if model_type == "mobilenet_quantized":
         transform = transforms.Compose([
@@ -105,9 +112,15 @@ def evaluate_single_cell(
                 img_t = transform(img).unsqueeze(0).numpy().astype(np.float32)
                 
                 outputs = model_obj.run(None, {input_name: img_t})
-                pred_idx = int(np.argmax(outputs[0]))
+                logits = outputs[0][0]
+                probs = softmax(logits)
+                
+                pred_idx = int(np.argmax(probs))
+                max_prob = float(probs[pred_idx])
+                
                 total += 1
-                if pred_idx == category_idx:
+                # If confidence is below 20%, it is considered unclassified (not counted as correct)
+                if max_prob >= CONF_THRESHOLD and pred_idx == category_idx:
                     correct += 1
             except Exception:
                 continue
@@ -117,7 +130,11 @@ def evaluate_single_cell(
             img_path = os.path.join(folder_path, filename)
             try:
                 results = model_obj(img_path, verbose=False)[0]
-                detected_bird = any(int(box.cls[0]) == 14 for box in results.boxes)
+                
+                # Filter boxes by confidence threshold (0.20)
+                valid_boxes = [box for box in results.boxes if float(box.conf[0]) >= CONF_THRESHOLD]
+                detected_bird = any(int(box.cls[0]) == 14 for box in valid_boxes)
+                
                 total += 1
                 if (target_category != "Other" and detected_bird) or (target_category == "Other" and not detected_bird):
                     correct += 1
