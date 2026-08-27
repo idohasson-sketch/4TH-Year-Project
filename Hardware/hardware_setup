@@ -40,9 +40,9 @@ SUPABASE_TABLE = "Observations"
 # Fixed deployment location tag — update per physical camera placement
 CAMERA_LOCATION = "Urban Garden - Site A"
 
-PHOTO_INTERVAL           = 2          # Seconds between photos in the same session
-NO_MOTION_TIMEOUT        = 5          # Seconds without motion to close the session
-DIFF_THRESHOLD           = (25, 255)  # Threshold for background subtraction (blob detection)
+PHOTO_INTERVAL = 2                    # Seconds between photos in the same session
+NO_MOTION_TIMEOUT = 5                 # Seconds without motion to close the session
+DIFF_THRESHOLD = (25, 255)            # Threshold for background subtraction (blob detection)
 MIN_CONFIDENCE_FOR_ALERT = 0.85       # Minimum AI confidence (85%) required to trigger WiFi transmission
 
 # Target urban bird species deployment
@@ -96,13 +96,13 @@ def send_to_supabase(label, bird_count):
     via a raw HTTPS POST to the Supabase REST API over port 443.
 
     Payload fields match the confirmed working schema:
-        - eventtime    : ISO 8601 timestamp from the on-board RTC
+        - eventtime:     ISO 8601 timestamp from the on-board RTC
         - birds species: Classified bird label (e.g. "Pigeon")
-        - location     : Fixed deployment location string from CAMERA_LOCATION
-        - amount       : Number of birds detected in this frame
+        - location:      Fixed deployment location string from CAMERA_LOCATION
+        - amount:        Number of birds detected in this frame
 
     Args:
-        label      (str): The classified bird species name.
+        label (str): The classified bird species name.
         bird_count (int): Count of detected birds in the frame.
     """
     if not connect_wifi():
@@ -112,11 +112,12 @@ def send_to_supabase(label, bird_count):
     s = None
     try:
         # Build timestamp from RTC
-        t         = rtc.datetime()
+        t =         rtc.datetime()
         eventtime = "%04d-%02d-%02dT%02d:%02d:%02d" % (t[0], t[1], t[2], t[4], t[5], t[6])
 
         # Build payload — column names match Supabase table exactly
-        payload        = json.dumps({
+        payload = json.dumps
+       ({
             "eventtime"    : eventtime,
             "birds species": label,
             "location"     : CAMERA_LOCATION,
@@ -126,13 +127,14 @@ def send_to_supabase(label, bird_count):
 
         # Open TCP + TLS connection to Supabase
         addr = socket.getaddrinfo(SUPABASE_HOST, 443)[0][-1]
-        s    = socket.socket()
+        s = socket.socket()
         s.settimeout(10.0)
         s.connect(addr)
-        s    = ssl.wrap_socket(s, server_hostname=SUPABASE_HOST)
+        s = ssl.wrap_socket(s, server_hostname=SUPABASE_HOST)
 
         # Build and send HTTP POST request
-        request = (
+        request = 
+       (
             "POST /rest/v1/%s HTTP/1.0\r\n"
             "Host: %s\r\n"
             "apikey: %s\r\n"
@@ -145,9 +147,8 @@ def send_to_supabase(label, bird_count):
         ) % (SUPABASE_TABLE, SUPABASE_HOST, SUPABASE_KEY, SUPABASE_KEY, content_length, payload)
 
         s.send(bytes(request, 'utf8'))
-
         # Read response status line
-        response    = b""
+        response = b""
         while True:
             try:
                 chunk = s.recv(256)
@@ -239,12 +240,12 @@ sensor.set_auto_whitebal(False)
 sensor.set_auto_exposure(False, exposure_us=5000)
 
 # ----------------------- HARDWARE & STATE -------------------
-pir              = Pin("P11", Pin.IN, Pin.PULL_UP)
-session_active   = False
+pir = Pin("P11", Pin.IN, Pin.PULL_UP)
+session_active = False
 last_motion_time = 0
-last_photo_time  = 0
-motion_index     = 0
-bg_img           = sensor.alloc_extra_fb(sensor.width(), sensor.height(), sensor.RGB565)
+last_photo_time = 0
+motion_index = 0
+bg_img = sensor.alloc_extra_fb(sensor.width(), sensor.height(), sensor.RGB565)
 
 # ----------------------- IMAGE PROCESSING & AI --------------
 def is_valid_target(blob):
@@ -257,7 +258,7 @@ def is_valid_target(blob):
     Returns:
         bool: True if properties meet strict hardware filters, False otherwise.
     """
-    min_width,  max_width  = 40, 200
+    min_width, max_width  = 40, 200
     min_height, max_height = 40, 180
     if blob.w() < min_width  or blob.w() > max_width:  return False
     if blob.h() < min_height or blob.h() > max_height: return False
@@ -281,9 +282,9 @@ def classify_raptor(img, roi):
     print("AI Inference starting...")
     try:
         predictions = net.predict([img], roi=roi)
-        output      = predictions[0]
-        idx         = output.index(max(output))
-        conf        = output[idx]
+        output = predictions[0]
+        idx = output.index(max(output))
+        conf = output[idx]
         print(">>> AI RESULT: %s (%2.1f%%)" % (LABELS[idx], conf * 100))
         return LABELS[idx], conf
     except Exception as e:
@@ -295,16 +296,16 @@ print("Ready for Urban Bird detection! Waiting for Motion...")
 disconnect_wifi()  # Maintain zero-power footprint on startup
 
 while True:
-    now     = time.time()
+    now = time.time()
     pir_val = pir.value()
 
     # Hardware Wake-Up Trigger via External Interrupt Line (PIR Low)
     if pir_val == 0:
         if not session_active:
             print(">>> MOTION DETECTED (PIR)")
-            session_active  = True
-            motion_index   += 1
-            img             = sensor.snapshot()
+            session_active = True
+            motion_index += 1
+            img = sensor.snapshot()
             bg_img.replace(img)
             last_photo_time = now - PHOTO_INTERVAL
         last_motion_time = now
@@ -325,22 +326,24 @@ while True:
                 valid_blobs = [b for b in blobs if is_valid_target(b)]
                 if valid_blobs:
                     bird_count = len(valid_blobs)
-                    target     = max(valid_blobs, key=lambda b: b.pixels())
+                    target = max(valid_blobs, key=lambda b: b.pixels())
 
                     # 3. AI classification on the dominant blob ROI
                     label, confidence = classify_raptor(img, target.rect())
-                    last_photo_time   = now
+                    last_photo_time = now
 
                     # 4. Save annotated image to SD card
                     if sd_available:
                         try:
-                            t     = rtc.datetime()
-                            fname = "/sd/S%d_M%d_%s_%02d%02d.jpg" % (
+                            t = rtc.datetime()
+                            fname = "/sd/S%d_M%d_%s_%02d%02d.jpg" % 
+                            (
                                 global_session_id, motion_index,
                                 label.replace(" ", "_"), t[5], t[6]
                             )
                             img.draw_rectangle(target.rect(), color=(0, 255, 0))
-                            img.draw_string(
+                            img.draw_string
+                            (
                                 target.x(), target.y() - 12,
                                 "%s %d%%" % (label, confidence * 100),
                                 color=(0, 255, 0)
