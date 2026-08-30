@@ -9,21 +9,21 @@ This document compiles and details all production SQL queries powering the A-EYE
 
 ### 1.1 Total Reports (Time-Filtered)
 Calculates the total number of hardware observation events logged within the selected dashboard timeframe.
-
+'''
 SELECT COUNT(*) AS "Total Reports"
 FROM "Observations"
 WHERE ("eventtime" AT TIME ZONE 'Asia/Jerusalem') BETWEEN $__timeFrom() AND $__timeTo();
 
 ### 1.2 Total Bird Individuals Sighted
 Calculates the aggregate count of all bird individuals across all recorded events within the timeframe.
-
+'''
 SELECT SUM(amount) AS "Total Birds"
 FROM "Observations"
 WHERE ("eventtime" AT TIME ZONE 'Asia/Jerusalem') BETWEEN $__timeFrom() AND $__timeTo();
 
 ### 1.3 Misclassified Observations Count
 Aggregates the number of misclassified reports (is_correct = FALSE) within the timeframe for edge model performance monitoring.
-
+'''
 SELECT SUM(amount) AS "Misclassified Reports"
 FROM "Observations"
 WHERE is_correct = FALSE
@@ -35,7 +35,7 @@ AND ("eventtime" AT TIME ZONE 'Asia/Jerusalem') BETWEEN $__timeFrom() AND $__tim
 
 ### 2.1 Full 5-Class Species Distribution (Single Row KPI / Bar Gauge)
 Breaks down the absolute count across all 5 active deployment categories.
-
+'''
 SELECT 
   'Total Count' AS metric,
   SUM(CASE WHEN "birds species" = 'House Sparrow' THEN amount ELSE 0 END) AS "House Sparrow",
@@ -48,7 +48,7 @@ WHERE ("eventtime" AT TIME ZONE 'Asia/Jerusalem') BETWEEN $__timeFrom() AND $__t
 
 ### 2.2 Correctly Classified Individuals by Species
 Lists total verified sightings per species sorted in descending volume.
-
+'''
 SELECT
   "birds species" AS bird_species,
   SUM(amount) AS total_healthy_birds
@@ -59,7 +59,7 @@ ORDER BY total_healthy_birds DESC;
 
 ### 2.3 Misclassified Individuals by Species
 Identifies which species experience higher misclassification rates to guide future fine-tuning.
-
+'''
 SELECT
   "birds species" AS bird_species,
   SUM(amount) AS total_injured_birds
@@ -84,7 +84,7 @@ ORDER BY 1;
 
 ### 3.2 Weekly Ingestion & Individual Count Trend
 Aggregates reports and total birds week-over-week to monitor seasonal activity trends.
-
+'''
 SELECT
   date_trunc('week', eventtime)::timestamptz AS "time",
   COUNT(*) AS "Total Reports",
@@ -95,7 +95,7 @@ ORDER BY 1;
 
 ### 3.3 Weekly Model Accuracy Rate (%)
 Tracks model classification accuracy versus misclassification percentage over time.
-
+'''
 SELECT
   date_trunc('week', eventtime)::timestamptz AS "time",
   ROUND(100.0 * SUM(CASE WHEN is_correct = TRUE THEN 1 ELSE 0 END) / COUNT(*), 1) AS "Classified %",
@@ -110,7 +110,7 @@ ORDER BY 1;
 
 ### 4.1 Last 24 Hours Activity Log Table
 Displays the latest incoming telemetry events in real time.
-
+'''
 SELECT
   eventtime AS "Time",
   "birds species" AS "Species",
@@ -123,7 +123,7 @@ ORDER BY eventtime DESC;
 
 ### 4.2 Overall Global Classification Ratio
 Provides the aggregate status distribution for pie charts and status gauges.
-
+'''
 SELECT 
   CASE 
     WHEN is_correct = TRUE THEN 'Classified'
@@ -136,7 +136,7 @@ GROUP BY is_correct;
 
 ### 4.3 Peak Sightings & Optimization Recommendation Engine
 Analyzes hourly volume per species and generates automated observation recommendations.
-
+'''
 WITH hourly_counts AS (
   SELECT
     "birds species" AS species,
