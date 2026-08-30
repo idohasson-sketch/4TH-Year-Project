@@ -74,7 +74,7 @@ ORDER BY total_injured_birds DESC;
 
 ### 3.1 24-Hour Diurnal Activity Distribution (Heatmap / Bar Chart)
 Extracts the hour of day from the timestamp to visualize peak activity hours in the monitored habitat.
-
+'''
 SELECT
   EXTRACT(HOUR FROM eventtime)::int AS "Hour of Day",
   COUNT(*) AS "Observations"
